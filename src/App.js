@@ -11,108 +11,122 @@ import {
   tuplesToGraph,
 } from "./util";
 import "./App.css";
-import { DEFAULT_PARAMS, LAYOUTS, requestOptions } from "./constants";
+import { DEFAULT_PARAMS, LAYOUTS, requestOptions, ENDPOINTS } from "./constants";
 import GithubLogo from "./github-mark.png";
 import LayoutSelector from "./LayoutSelector";
 
 function App() {
   const [prompt, setPrompt] = useState("");
-  const handlePromptChange = (e) => {
-    setPrompt(e.target.value);
-  };
+  const handlePromptChange = (e) => setPrompt(e.target.value);
 
   const [graphState, dispatch] = useReducer(graphReducer, initialState);
-
   const [option, setOptions] = useState(LAYOUTS.FCOSE);
-
   const [loading, setLoading] = useState(false);
 
   const [key, setKey] = useState("");
-  const handleKeyChange = (e) => {
-    setKey(e.target.value);
-  };
+  const handleKeyChange = (e) => setKey(e.target.value);
+
+  // NEW: endpoint selection (default: OpenRouter)
+  const [endpointKey, setEndpointKey] = useState("OPENROUTER");
+  const handleEndpointChange = (e) => setEndpointKey(e.target.value);
 
   const [file, setFile] = useState("");
 
   const handleJSONImport = (e) => {
     const fileReader = new FileReader();
     fileReader.readAsText(e.target.files[0], "UTF-8");
-    fileReader.onload = (e) => {
+    fileReader.onload = (e2) => {
       let data;
       try {
-        data = JSON.parse(e.target.result);
+        data = JSON.parse(e2.target.result);
       } catch (err) {
         console.info(err);
       }
       setFile(null);
       const result = restructureGraph(tuplesToGraph(cleanJSONTuples(data)));
-
       dispatch({ type: ACTIONS.ADD_NODES_AND_EDGES, payload: result });
     };
   };
 
-  const fetchGraph = (query) => {
+  const fetchGraph = () => {
     setLoading(true);
     fetch(main)
       .then((res) => res.text())
       .then((text) => text.replace("$prompt", prompt))
-      .then((prompt) => {
+      .then((promptText) => {
         const params = {
           ...DEFAULT_PARAMS,
-          messages: [{ role: "system", content: prompt }],
+          messages: [{ role: "system", content: promptText }],
         };
-        fetch("https://api.openai.com/v1/chat/completions", {
+
+        // Choose URL from dropdown
+        const url = ENDPOINTS[endpointKey];
+
+        // Compose headers
+        const hdrs = {
+          ...requestOptions.headers,
+          Authorization: "Bearer " + key,
+        };
+
+        // Optional: OpenRouter-friendly header (browser automatically sends Referer)
+        if (endpointKey === "OPENROUTER") {
+          hdrs["X-Title"] = "KnowledgeGraph GPT";
+        }
+
+        return fetch(url, {
           ...requestOptions,
-          headers: {
-            ...requestOptions.headers,
-            Authorization: "Bearer " + key,
-          },
+          headers: hdrs,
           body: JSON.stringify(params),
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            setLoading(false);
-            const result = restructureGraph(
-              tuplesToGraph(cleanTuples(data.choices[0].message.content))
-            );
-            dispatch({ type: ACTIONS.ADD_NODES_AND_EDGES, payload: result });
-          })
-          .catch((error) => {
-            setLoading(false);
-            console.log(error);
-          });
+        });
+      })
+      .then((response) => response.json())
+      .then((data) => {
+        setLoading(false);
+        const text = data?.choices?.[0]?.message?.content || "";
+        const result = restructureGraph(tuplesToGraph(cleanTuples(text)));
+        dispatch({ type: ACTIONS.ADD_NODES_AND_EDGES, payload: result });
+      })
+      .catch((error) => {
+        setLoading(false);
+        console.log(error);
+        alert("Request failed. Check console and verify endpoint, model, and API key.");
       });
   };
 
-  const handleSubmit = () => {
-    fetchGraph(prompt);
-  };
-
-  // const handleSecond = () => {
-  //   const result = restructureGraph(tuplesToGraph(cleanTuples(np)));
-  //   dispatch({ type: ACTIONS.ADD_NODES_AND_EDGES, payload: result });
-  // };
+  const handleSubmit = () => fetchGraph();
 
   return (
     <div className="App">
       <div className="mainContainer">
         <h1 className="title">KnowledgeGraph GPT</h1>
         <p className="text">
-          The project aims to utilize OpenAI's GPT-3 model to convert
-          unstructured text data into a structured knowledge graph
-          representation.
+          Convert unstructured text into a knowledge graph using your chosen LLM provider.
         </p>
+
+        {/* NEW: Endpoint selector */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={{ marginRight: 8, color: "#555" }}>API Endpoint:</label>
+          <select value={endpointKey} onChange={handleEndpointChange}>
+            <option value="OPENROUTER">OpenRouter (default)</option>
+            <option value="OPENAI">OpenAI</option>
+          </select>
+        </div>
+
         <input
           type="password"
-          onChange={(e) => handleKeyChange(e)}
+          onChange={handleKeyChange}
           value={key}
           className="keyInput"
-          placeholder="Enter your OpenAI API Key"
+          placeholder={
+            endpointKey === "OPENROUTER"
+              ? "Enter your OpenRouter API Key"
+              : "Enter your OpenAI API Key"
+          }
         />
         <br />
         <input
           type="text"
-          onChange={(e) => handlePromptChange(e)}
+          onChange={handlePromptChange}
           value={prompt}
           className="promptInput"
           placeholder="Enter your prompt"
@@ -127,9 +141,6 @@ function App() {
         </button>
         <br />
 
-        {/* <button className="submitButton" onClick={handleSecond}>
-          Second
-        </button> */}
         <div className="buttonContainer">
           <button
             className="submitButton"
@@ -178,5 +189,4 @@ function App() {
     </div>
   );
 }
-
 export default App;
