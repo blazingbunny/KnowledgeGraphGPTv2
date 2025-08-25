@@ -97,3 +97,13 @@ export const DEFAULT_PARAMS = {
 
 export const np =
   " \n(Ammar, knows, React); (Ammar, knows, C++); (Ammar, knows, Python); (Ammar, good_at, Programming)";
+
+
+export const ENDPOINTS = {
+  OPENROUTER: "https://openrouter.ai/api/v1/chat/completions",
+  OPENAI: "https://api.openai.com/v1/chat/completions",
+};
+
+// Keep your existing DEFAULT_PARAMS. If you mainly use OpenRouter, consider
+// switching to an OpenRouter model name (e.g., "openai/gpt-4o-mini").
+// export const DEFAULT_PARAMS = { model: "openai/gpt-4o-mini", ... }
