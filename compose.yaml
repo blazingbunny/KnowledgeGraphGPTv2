@@ -1,0 +1,68 @@
+services:
+  web:
+    image: node:18-alpine
+    working_dir: /srv
+    ports:
+      - 9677:80
+    restart: unless-stopped
+    networks:
+      - tunnelnet
+    volumes:
+      - webdata:/var/www/html
+    command: >
+      sh -euxo pipefail -c "
+        apk add --no-cache git curl ca-certificates python3 make g++ &&
+        update-ca-certificates &&
+        git clone --depth 1 --branch main https://github.com/blazingbunny/KnowledgeGraphGPT-master.git /src &&
+        cd /src/KnowledgeGraphGPT-master &&
+        (npm ci --no-audit --no-fund || npm install --no-audit --no-fund) &&
+        npm run build &&
+        cp -r build/* /var/www/html/ &&
+        exec npx --yes serve -s /var/www/html -l tcp://0.0.0.0:80
+      "
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:80/ >/dev/null || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+#  cloudflared:
+#    image: cloudflare/cloudflared:latest
+#    restart: unless-stopped
+#    networks:
+#      - tunnelnet
+#    depends_on:
+#      web:
+#        condition: service_healthy
+#    env_file:
+#      - .env
+#    environment:
+#      CF_TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN}
+#      TUNNEL_TRANSPORT_PROTOCOL: http2
+#      NO_AUTOUPDATE: "true"
+#    command:
+#      - tunnel
+#      - --metrics
+#      - 0.0.0.0:2000
+#      - run
+#      - --token
+#      - ${CF_TUNNEL_TOKEN}
+#    healthcheck:
+#      test:
+#        - CMD-SHELL
+#        - wget -qO- http://127.0.0.1:2000/ready || exit 1
+#      interval: 10s
+#      timeout: 3s
+#      retries: 12
+#      start_period: 20s
+volumes:
+  webdata:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+networks:
+  tunnelnet:
+    driver: bridge
